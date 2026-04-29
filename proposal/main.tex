@@ -1,0 +1,347 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[margin=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{natbib}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{parskip}
+
+\setlength{\columnsep}{0.6cm}
+
+\title{\textbf{Uncertainty-Aware Heart Murmur Detection from Phonocardiogram Recordings Using Classical Machine Learning: A Multi-Domain Feature Engineering and Ablation Study on the CirCor 2022 Dataset}}
+
+\author{Shishir Kandel \\
+\textit{ML Module Project Proposal}}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% ============================================================
+\begin{abstract}
+Cardiovascular disease is the leading cause of death worldwide, and cardiac auscultation remains the most widely deployed first-line screening tool for structural heart disease. Yet general practitioners detect heart murmurs with only 30--50\% accuracy, and inter-observer agreement among cardiologists is fair at best ($\kappa = 0.48$), creating a persistent global diagnostic gap in both high- and low-income settings. This project proposes a heart-murmur screening pipeline built on rich multi-domain audio feature engineering over the PhysioNet/CinC Challenge 2022 (CirCor DigiScope) dataset---5{,}272 recordings from 1{,}452 primarily pediatric patients screened in rural Brazil under realistic ambulatory noise conditions. Published classical studies on this dataset report results that are highly sensitive to the feature--classifier pairing: K-NN with MFCCs reached 76.31\% \citep{fuadah2023} but K-NN with wavelet-entropy features reached only $\approx$64\%; SVM with MFCC features reached 58.81\% \citep{fuadah2023} but SVM with multiscale wavelet features reached 76.61\% \citep{wavelet2025}---the current best-published classical result. To our knowledge, no study has combined MFCC, spectral, wavelet, fractal/complexity, and heart-cycle temporal features into a single classical pipeline on this dataset, and no study has performed a cross-family ablation that quantifies the marginal contribution of each family. We engineer 48 features across five domains after a domain-specific preprocessing pipeline (25--450~Hz Butterworth bandpass, 3$\times$-median spike removal, wavelet soft-thresholding, amplitude normalisation) and evaluate five classical models chosen to cover the principal paradigms of engineered-feature classification: Logistic Regression with $\ell_1$ regularisation (linear/parsimony baseline), K-Nearest Neighbours (non-parametric similarity, the strongest classical model on CirCor with MFCC features in prior work), Support Vector Classification with RBF kernel (current pure-classical SOTA at 76.61\%), XGBoost (gradient-boosted trees, scale-invariant across heterogeneous features and used by top CirCor Challenge entries \citep{rohr2024heart2beat, walker2022dbres}), and Gaussian Process Classification (GPC) at the recording level for principled Bayesian uncertainty. The central methodological contribution is a five-model $\times$ five-feature-family ablation grid (25 cells) that isolates which feature families drive classical-model performance on the CirCor dataset---a question the literature has not answered. Multi-domain fusion has been demonstrated on older datasets, and uncertainty estimation on CirCor has been attempted only with deep-learning approximations (Monte Carlo Dropout in Walker et al.\ \citep{walker2022dbres}); the combination of five-family fusion with exact kernel-based Bayesian GPC on this dataset appears, to our knowledge, unaddressed. The pipeline is motivated as a global cardiac-screening augmentation and contextualised with a Nepal case study on rheumatic heart disease screening where auscultation is the field-standard gatekeeper and a measurable source of missed disease \citep{nepal_rhd2023}.
+\end{abstract}
+
+% ============================================================
+\section{Introduction}
+
+In Nepal, rheumatic heart disease (RHD) is one of the most pressing paediatric cardiovascular problems. A national school-screening programme that clinically examined 107,340 schoolchildren reported definite or borderline RHD in 2.22 per 1000 children (95\% CI 1.94--2.50), rising to 5.47 per 1000 in high-burden districts such as Kalikot \citep{nepal_rhd2023}. Isolated mitral regurgitation---a systolic murmur---was the dominant lesion, accounting for 70.7\% of RHD cases. The programme uses cardiac auscultation as the first-stage gatekeeper: only children with a murmur of grade $>$1 on auscultation proceed to echocardiography and cardiology referral. Every auscultatory false-negative in this workflow is a child with treatable, progressive valve disease who leaves the screening camp undiagnosed and does not receive the secondary-prophylaxis antibiotics that halt RHD progression. Improving the sensitivity or reliability of the auscultation step has a direct, measurable clinical impact in Nepal.
+
+This same gatekeeper bottleneck is global. Cardiovascular diseases are the leading cause of death worldwide, accounting for an estimated 17.9 million fatalities annually \citep{who2021}, and the burden is rising fastest in low- and middle-income countries. Primary-care physicians detect heart murmurs with only 30--50\% accuracy, with recognition rates of 60--80\% for systolic murmurs but as low as 20--30\% for diastolic murmurs \citep{lam2015}; even among cardiologists, inter-observer agreement reaches only $\kappa = 0.48$ \citep{dahl2022}. These deficits are documented across U.S.\ teaching hospitals, European primary care, and rural South America alike---the PhysioNet 2022 CirCor DigiScope dataset that this project uses was itself collected during cardiac screening campaigns in rural Paraíba, Brazil \citep{challenge2022}, a context structurally similar to Nepal's rural camps.
+
+Paediatric cardiac auscultation is distinct from adult auscultation and deserves its own attention. Children's heart rates are 2--3$\times$ faster than adults', shortening cardiac cycle intervals and shifting frequency content upward. Up to 80\% of children exhibit an \textit{innocent} (functional, vibratory) murmur at some point---soft, systolic, clinically benign---which must be distinguished from pathological murmurs caused by congenital lesions (VSD, ASD, PDA) or RHD-driven valvular damage. This distinction is precisely the task a general practitioner is least equipped to perform reliably. The CirCor 2022 dataset was built specifically for this paediatric screening scenario: 942 patients in the public split are predominantly children (664 Child, 126 Infant, 72 Adolescent, 6 Neonate), screened at up to five auscultation locations per child, with murmurs annotated by expert auscultators and outcomes confirmed by echocardiography. The dataset's paediatric composition is a strength for Nepal-facing work, not a limitation.
+
+Digital stethoscopes now enable recording, storage, and computational analysis of heart sounds (phonocardiograms, PCGs). Machine learning applied to these recordings promises to augment human auscultation at scale. The modern heart-sound literature is dominated by deep learning \citep{challenge2022}, but deep models require large training corpora, GPU infrastructure, and produce poorly calibrated probabilities \citep{guo2017}---all of which are obstacles in exactly the rural, resource-constrained settings (Nepal's school-screening camps, sub-Saharan Africa's field clinics) where the screening gap is largest. Classical machine learning with handcrafted features remains attractive for interpretability, computational economy, small-sample reliability, and---crucially for clinical deployment---calibration. On the most recent and most realistic public dataset (PhysioNet 2022 CirCor), however, no study has yet combined the five feature families that have individually shown promise, systematically isolated their marginal contributions, or provided principled (non-approximated) Bayesian uncertainty. This project targets those three gaps, with Nepal paediatric RHD screening as the primary clinical motivation.
+
+The central research question is: \textit{Can a classical machine learning pipeline, trained on a unified multi-domain feature set engineered from phonocardiogram recordings with domain-appropriate denoising and quality controls, detect heart murmurs with clinically useful accuracy and provide calibrated uncertainty estimates suitable for deployment as an auscultation gatekeeper in global cardiac screening programmes?}
+
+% ============================================================
+\section{Problem Statement}
+
+The concrete deployment scenario motivating this work is Nepal's school-based RHD screening programme. Thousands of schoolchildren are screened per camp by general practitioners, community physicians, and health assistants using acoustic stethoscopes. Only children with an audible murmur of grade $>$1 are referred for echocardiography. This creates three compounding failure modes that are acute in Nepal and generalise to paediatric cardiac screening worldwide (sub-Saharan Africa, rural South America, South Asia):
+
+\begin{enumerate}[label=(\alph*)]
+    \item \textbf{Low detection accuracy at the gatekeeper step.} A general practitioner detects heart murmurs with only 30--50\% accuracy \citep{lam2015}; even in well-resourced U.S.\ and European systems auscultation is a documented weak link. Nearly half of children with genuine valvular disease leave the screening camp undiagnosed.
+    \item \textbf{Innocent-vs-pathological ambiguity in children.} Up to 80\% of paediatric murmurs are innocent (vibratory, systolic, benign) and must be distinguished from RHD-driven mitral regurgitation or congenital lesions. This is the exact discrimination a generalist struggles with most. The cost of misclassification is asymmetric: missed pathology progresses to heart failure, whereas over-referral consumes scarce echocardiography capacity.
+    \item \textbf{No calibrated confidence output.} No existing screening tool reports how \textit{certain} it is. A system saying ``murmur detected, 92\% confidence---refer for echocardiography'' versus ``uncertain, 55\%---re-record from different position'' would change clinical decision-making. Current ML systems typically emit uncalibrated probabilities \citep{guo2017}.
+\end{enumerate}
+
+This is a machine learning problem because: (a) paediatric heart-sound signals contain complex spectral, temporal, and morphological patterns that cannot be captured by threshold rules; (b) the relationship between audio features and murmur presence is nonlinear---murmurs vary in timing, pitch, intensity, and shape depending on underlying pathology, age, and body size; and (c) the goal is \textit{prediction} on unseen children with quantified uncertainty, not merely testing statistical associations. A statistical parsimony test is embedded in the design: if a simple $\ell_1$-penalised logistic regression matches nonlinear models, we report this honestly rather than manufacturing complexity.
+
+% ============================================================
+\section{Literature Review and Gap Analysis}
+
+\subsection{Classical ML for Heart Sound Classification on CirCor 2022}
+
+Classical machine learning has been applied to the CirCor 2022 dataset in approximately a dozen published works. Fuadah et al.\ \citep{fuadah2023} compared K-NN, Random Forest, ANN, and SVM with MFCC features and grid-search tuning; on CirCor 2022 the ranking was K-NN 76.31\%, RF 68.76\%, ANN 65.18\%, SVM 58.81\%. Vimalajeewa et al.\ \citep{wavelet2025} evaluated LR, K-NN, SVM, and a feed-forward NN on ten multiscale wavelet + fractal features on CirCor; SVM-RBF reached \textbf{76.61\% (Sens.\ 82.12\%, Spec.\ 54.02\%, AUC 0.741)}---the current best-published \textit{pure classical} result on this dataset for the 2-class murmur task---while K-NN with the same wavelet features reached only $\approx$64\%, and LR reached 63.98\%. The comparison is diagnostic: \textit{K-NN and SVM exchange ranks depending on feature family.} K-NN wins with MFCC features (where local similarity in cepstral space is meaningful); SVM wins with wavelet-entropy features (where RBF kernel geometry aligns with the fractal structure). This model--feature interaction directly motivates a combined feature set evaluated with multiple classifier paradigms, which the prior literature has not done on CirCor.
+
+Among the richer CirCor submissions, the Heart2Beat team \citep{rohr2024heart2beat} used 622 engineered time--frequency + demographic + segment-duration features pruned to 22 with ANOVA-F selection, fused with a pooling neural network, reaching weighted accuracy 0.751 on the Challenge hidden test. This is the closest existing work to a rich multi-domain engineered-feature pipeline on CirCor, but it is a \textit{hybrid} (deep features combined with handcrafted features in a fully connected network), not a purely classical pipeline, and it does not include an explicit fractal/complexity or full heart-cycle-temporal feature family. Multi-domain feature fusion on the earlier PhysioNet 2016 dataset has precedent (multiple studies combining cepstral, spectral, wavelet, or fractal features with SVMs reach 88--94\% on 2016), but none of these works combines all five of (a) MFCCs, (b) a distinct spectral-descriptor family (centroid, bandwidth, rolloff, flatness, ZCR, RMS), (c) wavelet entropy/energy, (d) explicit fractal/complexity measures (fractal dimension, ApEn, SampEn, Hurst), AND (e) heart-cycle-temporal features (S1/S2 amplitudes and duration ratios); and none runs such a combination on CirCor 2022.
+
+\subsection{Why Classical ML Models for Audio/Sound Classification?}
+
+Independent of the cardiac domain, the broader sound-classification literature consistently ranks SVM, K-NN, Random Forest, and Gradient Boosting as the strongest classical options. \textit{However, their ranking is strongly feature-dependent}: K-NN dominates when features are homogeneous and metrically consistent (e.g., raw MFCC coefficients); SVM-RBF dominates on nonlinearly structured feature manifolds (e.g., wavelet entropy); and gradient-boosted trees (XGBoost \citep{chen2016xgboost}) dominate when features are heterogeneous in scale and type---the regime that applies to our 35+ features spanning cepstral, spectral, wavelet, fractal, and temporal domains. The two front-runners reported in prior CirCor papers (K-NN for Fuadah's MFCC-only set, SVM-RBF for Vimalajeewa's wavelet-only set) each won within a homogeneous feature space; neither can be assumed to transfer to a heterogeneous one. This observation directly drives our choice to pair SVC-RBF (the incumbent CirCor SOTA) with XGBoost (the expected winner for heterogeneous tabular-ML features), using Lasso-LR as the linear parsimony baseline and GPC as the calibrated-uncertainty novelty.
+
+\subsection{Deep Learning Benchmarks on CirCor 2022}
+
+Deep learning dominates recent heart-sound research. On CirCor 2022 specifically, the published weighted-accuracy leaderboard spans approximately 0.77--0.83, including CNN, transformer, and audio-foundation-model approaches; representative examples are the Walker et al.\ Dual Bayesian ResNet + XGBoost hybrid (weighted accuracy 0.771, Challenge rank 4) \citep{walker2022dbres} and the HearHeart lightweight CNN (0.780, Challenge rank 1) \citep{challenge2022}. Deep models, while powerful, require large data, GPU infrastructure, and are poorly calibrated \citep{guo2017}. This project deliberately restricts itself to classical ML for three reasons: (1) module constraints reserve neural networks for a later module; (2) classical models are interpretable, which matters for clinical trust; (3) classical models run on commodity hardware, which matters for global deployment contexts from primary care to rural screening. \textbf{The target ceiling of this project is therefore the classical-ML SOTA (SVM-RBF + wavelet at 76.61\% on 2-class murmur detection \citep{wavelet2025}), not the deep-learning SOTA ($\approx$83\%).}
+
+\subsection{Uncertainty Quantification in Heart Sound Analysis}
+
+The need for uncertainty quantification (UQ) in cardiac auscultation ML has been explicitly identified: standard deep models are poorly calibrated, producing overconfident probabilities that cannot reflect diagnostic confidence \citep{guo2017}. All published UQ work on CirCor 2022 uses deep-learning approximations rather than exact Bayesian inference, for example Walker et al.\ applying Monte Carlo Dropout to a Dual Bayesian ResNet \citep{walker2022dbres}. Robust Gaussian Process classification has been applied to ECG (the MuyGPs approach of Goumiri et al.\ \citep{muygps2024}) but not to PCG. To our knowledge, Gaussian Process Classification with full kernel-based posterior inference (in the sense of \citet{rasmussen2006}) has not been applied to phonocardiogram-based murmur detection---we phrase this conservatively as \textit{``limited prior application''} since negative literature evidence is never conclusive, and cite the ECG work above as the closest prior art.
+
+\subsection{Noise, Preprocessing, and Data Quality on the CirCor Dataset}
+
+Unlike the lab-recorded PhysioNet 2016 dataset, CirCor 2022 was collected in ambulatory conditions and is explicitly noisy. The dataset documentation \citep{circor_data, challenge2022} reports multiple non-stationary noise sources: stethoscope rubbing against skin, speaking/crying/laughing in the background, motion artifacts, ambient speech, and physiological interference from intestinal and breath sounds. Recording durations range 8--312 seconds, sampling at 4000~Hz, recorded at 4 (sometimes 5) auscultation locations per patient (PV, TV, AV, MV, Phc). This matches the actual deployment context---auscultation in noisy clinics, field camps, and rural posts---so a pipeline that implicitly assumes clean signal is likely to overfit to irrelevant artifacts.
+
+Standard PCG-denoising practice converges on four preprocessing operations: (a) a 4th-order Butterworth bandpass 25--450~Hz to isolate the cardiac-sound frequency band; (b) amplitude spike removal replacing values above $3\times$ median absolute value with zeros; (c) wavelet-based denoising, typically reported to improve SNR by 15--30 dB; (d) recording-level amplitude normalisation to remove gain differences. Whether denoising ultimately helps classification is an open question, with mixed findings in the literature---so the project reports results with \textit{and} without denoising as a sensitivity analysis.
+
+\subsection{Nepal-Specific Clinical Context}
+
+The national-level analysis of the Nepal Heart Foundation screening database \citep{nepal_rhd2023} covered 107,340 schoolchildren (paediatric, school-attending, ages roughly 5--15 years). Key findings: definite or borderline RHD prevalence 2.22 per 1000 (95\% CI 1.94--2.50) overall, regional variation to 5.47 per 1000 in Kalikot district, and isolated mitral regurgitation as the dominant valvular lesion (70.7\% of RHD cases). The screening workflow uses cardiac auscultation as the gatekeeper: only children with a murmur of grade $>$1 proceed to echocardiography. This pathway makes auscultation sensitivity the critical operating characteristic: every false negative is a child with progressive valvular disease who is not identified and therefore does not receive secondary-prophylaxis penicillin that would halt RHD progression. Four features of the Nepal context make CirCor 2022 a strong fit for methodology development:
+\begin{itemize}[leftmargin=*, itemsep=0.05em]
+    \item Both populations are paediatric (CirCor 664 Child + 126 Infant + 72 Adolescent + 6 Neonate out of 942 patients; Nepal programme targets schoolchildren).
+    \item Both clinical settings are resource-constrained (rural screening camps with digital/acoustic stethoscopes; no on-site echocardiography for most children).
+    \item Mitral regurgitation---the dominant Nepal lesion---produces systolic murmurs that are explicitly labelled and well-represented in CirCor's Murmur-Present class.
+    \item Auscultation is the gating step in both workflows; improving its sensitivity has identical downstream clinical value in both contexts.
+\end{itemize}
+Nepal is the primary clinical case; the project's methodology is dataset-level and generalises to any paediatric RHD-screening programme with similar auscultation-gatekeeper workflows.
+
+\subsection{Identified Gaps}
+
+\begin{table}[H]
+\centering
+\caption{Research gaps addressed by this project, narrowed to defensible claims after literature review.}
+\label{tab:gaps}
+\small
+\begin{tabular}{p{1.2cm}p{5.8cm}}
+\toprule
+\textbf{Gap} & \textbf{Description} \\
+\midrule
+\textbf{Gap 1} & \textit{Five-family feature fusion on CirCor 2022.} Multi-domain fusion exists on the older PhysioNet 2016 dataset and as partial fusion on CirCor (e.g., Heart2Beat \citep{rohr2024heart2beat} uses MFCC + spectral + demographics, but not fractal or explicit heart-cycle-temporal families); to our knowledge no published study combines MFCC, distinct spectral descriptors, wavelet entropy/energy, explicit fractal/complexity, \textit{and} heart-cycle-temporal features on CirCor 2022 in a single classical pipeline. \\
+\midrule
+\textbf{Gap 2} & \textit{Feature-family ablation on CirCor 2022.} No published study systematically quantifies which feature families drive classical-model performance on this dataset, or how this varies across classifiers---despite the demonstrated feature--classifier interaction (K-NN vs.\ SVM rank-swap across MFCC vs.\ wavelet features) noted above. \\
+\midrule
+\textbf{Gap 3} & \textit{Exact Bayesian UQ via GPC on PCG.} All published UQ on CirCor 2022 uses deep-learning approximations (MC Dropout, Bayesian transformers); to our knowledge GPC with full kernel-based posterior inference has not been applied to phonocardiogram murmur detection. Closest prior art is on ECG \citep{muygps2024}. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Research Hypotheses}
+
+\begin{enumerate}[label=\textbf{H\arabic*:}]
+    \item The unified multi-domain feature set (35+ features) will outperform each individual feature family when evaluated with the same classifier; the gain will be largest against MFCC-only and smallest against the best individual family (wavelet).
+    \item At least one of the nonlinear models (SVC-RBF, XGBoost, GPC) will outperform $\ell_1$-logistic regression, providing evidence for genuine nonlinearity in the feature-to-label relationship. If Lasso-LR matches the nonlinear models within one standard deviation across CV folds, we report this honestly as a parsimony finding.
+    \item XGBoost is expected to be the strongest classifier on the full heterogeneous feature set. Unlike K-NN (which won on Fuadah's homogeneous 42-MFCC feature space \citep{fuadah2023}) or SVC-RBF (which won on Vimalajeewa's homogeneous 10-wavelet feature space \citep{wavelet2025}), our feature set mixes cepstral, spectral, wavelet, fractal, and temporal domains with different scales and statistical structures. Tree-splitting is scale-invariant, handles heterogeneous feature types natively, and XGBoost is used in the integration stages of the strongest CirCor Challenge entries \citep{rohr2024heart2beat, walker2022dbres}; we therefore expect it to match or exceed SVC-RBF's 76.61\% benchmark \citep{wavelet2025}.
+    \item GPC at the recording level will produce probability estimates better calibrated than Lasso-LR, Platt-scaled SVC-RBF, and XGBoost sigmoid by Expected Calibration Error (ECE); predictive uncertainty on held-out \textit{Unknown} recordings will be significantly higher than on \textit{Present}/\textit{Absent} recordings (Wilcoxon test), validating GPC for flagging ambiguous clinical cases.
+\end{enumerate}
+
+% ============================================================
+\section{Methodology}
+
+\subsection{Dataset: PhysioNet/CinC Challenge 2022 (CirCor DigiScope)}
+
+The George B.\ Moody PhysioNet Challenge 2022 \citep{challenge2022, circor_data} provides the CirCor DigiScope dataset, the largest public PCG dataset. Data were collected during cardiac screening campaigns in rural Paraíba, Brazil, using Littmann 3200 digital stethoscopes at up to five auscultation locations per patient.
+
+\begin{table}[H]
+\centering
+\caption{CirCor 2022 dataset summary (public training portion).}
+\label{tab:dataset}
+\small
+\begin{tabular}{p{3.2cm}p{3.8cm}}
+\toprule
+\textbf{Attribute} & \textbf{Detail} \\
+\midrule
+Total public recordings & 3,163 (5,272 full set) \\
+Public patients & 942 (1,452 full set) \\
+Public train / hidden val+test & 60\% / 40\% \\
+Partitioning & Patient-wise, stratified over Present / Absent / Unknown \\
+Murmur Present & $\approx$13\% of recordings \\
+Murmur Absent & $\approx$70\% of recordings \\
+Murmur Unknown & $\approx$17\% of recordings \\
+Auscultation locations & PV, TV, AV, MV, Phc \\
+Sampling rate & 4,000 Hz \\
+Duration range & 8--312 seconds \\
+File types per patient & .wav (audio), .hea (header), .tsv (S1/S2 segmentation), .txt (metadata) \\
+Clinical outcome & Normal / Abnormal \\
+Demographics & Age category, sex, height, weight, pregnancy \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Class imbalance is severe---Absent outnumbers Present by $\approx$5:1---and is addressed with class-weighted loss and stratified patient-level cross-validation rather than synthetic oversampling, to avoid leakage.
+
+\textbf{Primary target.} Murmur detection (Present vs.\ Absent) is the primary binary classification task. Outcome Normal vs.\ Abnormal (echocardiography-derived) is reported as a secondary task without hyperparameter tuning.
+
+\textbf{Handling of the \textit{Unknown} class.} Unknown recordings are excluded from primary training and evaluation. They are retained as a held-out auxiliary set used \textit{only} to test whether GPC's predictive uncertainty is systematically higher on these cases (Hypothesis H4).
+
+\subsection{Preprocessing and Denoising Pipeline}
+
+CirCor is noisy by design \citep{circor_data}. A principled preprocessing pipeline matters at least as much as model choice and is reported as a contribution in its own right.
+
+\begin{enumerate}
+    \item \textbf{Resampling} to a uniform 4000~Hz (some older releases of CirCor are at 2000~Hz; resampling standardises across versions).
+    \item \textbf{DC-offset removal} by mean subtraction.
+    \item \textbf{Bandpass filtering:} 4th-order zero-phase Butterworth, 25--450~Hz, isolating the cardiac-sound band.
+    \item \textbf{Amplitude spike removal:} any sample with $|x_i| > 3 \cdot \text{median}(|x|)$ is treated as a motion artefact and replaced with a short zero-segment centred on that sample.
+    \item \textbf{Wavelet soft-thresholding denoising:} Daubechies-4 wavelet, universal threshold $\sigma\sqrt{2\log n}$ with $\sigma$ estimated from the highest-frequency detail coefficients. Reported SNR gains in the literature: 15--30 dB.
+    \item \textbf{Recording-level amplitude normalisation} (peak-to-peak scaled to [-1, 1]) to remove inter-recording gain variation.
+    \item \textbf{Heart-cycle segmentation:} S1/S2 peak detection from the Shannon-energy envelope. The supplied CirCor \texttt{.tsv} segmentation labels provide a ground-truth reference for segmentation accuracy.
+    \item \textbf{Quality gating:} a recording is flagged ``low quality'' if estimated SNR is below 5~dB, clipping affects more than 0.1\% of samples, or fewer than 3 valid cardiac cycles are detected. Low-quality recordings enter a sensitivity analysis but not primary training.
+\end{enumerate}
+
+A \textbf{denoising ablation} is run: every model is trained with and without the wavelet-denoising step, to quantify whether denoising helps, hurts, or is neutral for classification---an open question in the literature.
+
+\subsection{Exploratory Data Analysis (planned)}
+
+Before modelling, the following EDA is performed on the public training subset and reported in the Results section: (a) recording-duration distribution per class; (b) class-imbalance confirmation at patient and recording level; (c) auscultation-location × murmur cross-tabulation (does murmur prevalence vary by location?); (d) demographics (age category, sex, weight, height) × murmur cross-tabulation; (e) SNR and clipping-rate distributions per class; (f) silence-fraction and amplitude-envelope statistics; (g) representative time-domain waveforms and log-mel spectrograms for ten recordings per class; (h) feature-feature correlation matrix after extraction. The EDA serves as both a marks-bearing deliverable and a sanity check on later modelling choices (e.g., whether to class-weight or use a per-location classifier).
+
+\subsection{Feature Engineering}
+
+From each preprocessed recording, 35+ features are engineered across five domains. Where applicable, per-feature distributions are summarised by mean, std, min, max, median---the standard descriptive-statistic reduction for audio features computed frame-wise \citep{librosa2015}.
+
+\textbf{Mel-Frequency Cepstral Coefficients (26 features).} MFCCs capture the spectral envelope distinguishing normal heart sounds from murmurs. 20--40~ms analysis window with 10~ms step, 13 coefficients plus first-order deltas, reduced to recording-level statistics. MFCC alone achieved 68.76\% (RF) and 76.31\% (K-NN) on CirCor 2022 \citep{fuadah2023}.
+
+\textbf{Spectral features (6 features).} Spectral centroid (perceived pitch), bandwidth, rolloff (95\% energy point), flatness (tonality vs.\ noise-like), zero-crossing rate, and RMS energy.
+
+\textbf{Wavelet-based features (4 features).} Wavelet entropy across scales, discrete-wavelet-transform scaling exponents, and wavelet energy distribution across frequency bands. Wavelet alone + SVM achieved 76.61\% on CirCor 2022 \citep{wavelet2025}, the current best published classical result.
+
+\textbf{Heart-cycle temporal features (6 features).} S1 amplitude, S2 amplitude, S1/S2 amplitude ratio, systolic duration, diastolic duration, systolic/diastolic ratio---derived from the \texttt{.tsv} segmentation labels (when available) or from Shannon-envelope peak detection (when not). These depend on segmentation and are therefore excluded from the segmentation-robust subset.
+
+\textbf{Fractal and complexity features (4 features).} Fractal dimension (Higuchi), approximate entropy, sample entropy, Hurst exponent. Capture self-similarity and non-stationarity.
+
+\textbf{Signal-quality features (2 features).} Estimated SNR, clipping indicator. Enable the model to condition its confidence on input quality---an often-overlooked practice in audio ML.
+
+\textbf{Total: 35+ features.} A \textit{segmentation-robust} subset (all features except the 6 heart-cycle temporal features) is also defined, so results can be reported with and without dependence on segmentation.
+
+\subsection{Model Selection and Justification}
+
+Four classical models are selected, each answering a distinct analytical sub-question. Model choice is driven by \textit{our} heterogeneous 35+ feature set (mixing cepstral, spectral, wavelet, fractal, and temporal domains), not by the model rankings reported in prior CirCor papers---whose feature sets were homogeneous (Fuadah \citep{fuadah2023}: 42 MFCCs only; Vimalajeewa \citep{wavelet2025}: 10 wavelet features only) and therefore favoured classifiers suited to those specific geometries.
+
+\textbf{Model 1: Logistic Regression with $\ell_1$ Penalty (Lasso-LR) --- Parsimony Baseline.} $\ell_1$-penalised logistic regression fits a linear decision boundary while driving uninformative feature coefficients to exactly zero. It serves as (a) the statistical baseline under the professor's principle not to apply ML where statistics suffices, and (b) a built-in feature-selection mechanism: the surviving non-zero coefficients identify which features carry information after regularisation.
+\textit{Hyperparameters:} $C \in \{0.01, 0.1, 1, 10\}$ tuned by nested CV.
+
+\textbf{Model 2: Support Vector Classification with RBF Kernel (SVC-RBF) --- Current SOTA Benchmark.} SVC-RBF holds the current best pure-classical result on CirCor 2022 (76.61\% with multiscale wavelet features, \citep{wavelet2025}). The RBF kernel captures nonlinear feature interactions without manual specification and handles high-dimensional inputs via $\gamma$-parameter tuning. Including SVC-RBF provides a direct like-for-like benchmark against the published SOTA: we train the same model architecture with our richer 35+ feature set and measure the accuracy delta. If richer features lift SVC-RBF above 76.61\%, the feature-engineering contribution is quantified cleanly. Platt scaling is used to convert SVC margins into probabilities for calibration comparison with GPC.
+\textit{Hyperparameters:} $C \in \{0.1, 1, 10, 100\}$; $\gamma \in \{\text{scale}, \text{auto}, 0.01, 0.001\}$.
+
+\textbf{Model 3: XGBoost --- Gradient-Boosted Tree Ensemble (primary classifier for heterogeneous features).} XGBoost builds trees sequentially, each correcting the residuals of the previous ensemble, with $\ell_1/\ell_2$ regularisation and second-order gradient information. It is specifically well-matched to our feature set for three reasons: (a) tree splits are scale-invariant, so mixing MFCC coefficients (order 1), spectral centroid (in Hz), fractal dimension (unitless 1--2), and S1/S2 durations (in ms) requires no careful joint normalisation; (b) gradient boosting models multiplicative interactions between features natively (e.g., the pathological signal may be ``high wavelet entropy AND abnormal S1/S2 ratio''), which is exactly the kind of structure a multi-family feature set is designed to capture; (c) it is used in the integration stages of the strongest CirCor Challenge entries---Walker et al.\ use XGBoost to merge DBRes outputs with demographics and signal features \citep{walker2022dbres}, and the Heart2Beat team uses XGBoost/boosting in their 622$\rightarrow$22 engineered-feature pipeline \citep{rohr2024heart2beat}. XGBoost's native gain-based feature importance also serves as the project's primary feature-importance diagnostic.
+\textit{Hyperparameters:} $n_{\text{estimators}} \in \{100, 300, 500\}$; $\max_{\text{depth}} \in \{3, 5, 7\}$; learning rate $\in \{0.01, 0.05, 0.1\}$; subsample $\in \{0.7, 1.0\}$; $\text{colsample\_bytree} \in \{0.7, 1.0\}$; \texttt{scale\_pos\_weight} set to the Absent/Present ratio for class imbalance.
+
+\textbf{Model 4: Gaussian Process Classifier (GPC) --- Bayesian Uncertainty.} GPC provides calibrated probability estimates via full kernel-based posterior inference, unlike MC-Dropout approximations used in deep UQ work on this dataset \citep{walker2022dbres}. To keep GPC tractable ($\mathcal{O}(n^3)$), this project commits up-front to recording-level GPC only: after excluding Unknown, $n \approx 2{,}630$ in the public training set, giving a Gram matrix of $\approx$55~MB---well within commodity-hardware limits. If wall-clock time remains excessive, the sparse variational GPC with 200--500 inducing points \citep{rasmussen2006} is the stated fallback, implemented via \texttt{GPyTorch}. GPC's inclusion is therefore not contingent on feasibility; only the implementation (full vs.\ sparse) is.
+\textit{Hyperparameters:} RBF kernel with length-scale optimised by marginal-likelihood maximisation on the training fold.
+
+\subsection{Why Not Other Classical Models?}
+
+The exclusion rationale is recorded explicitly so that the four-model set reads as designed, not defaulted to. The primary exclusion criterion is feature-space fit: our 35+ heterogeneous feature set favours models robust to mixed feature scales and interactions.
+
+\begin{itemize}[leftmargin=*,itemsep=0.1em]
+    \item \textbf{K-Nearest Neighbours (K-NN).} K-NN's prior 76.31\% on CirCor \citep{fuadah2023} was obtained with 42 \textit{homogeneous} MFCC coefficients---all in the same cepstral feature space where Euclidean distance is geometrically meaningful. Our feature set is heterogeneous: MFCC coefficients, spectral centroid (Hz), fractal dimension (unitless), and heart-cycle durations (ms) live in different metric spaces. Even after standardisation, Euclidean distance across these mixed domains captures the wrong similarity. K-NN's drop from 76.31\% (MFCC-only, Fuadah) to $\approx$64\% (wavelet-only, Vimalajeewa \citep{wavelet2025}) on the same dataset confirms this feature-space sensitivity. XGBoost and SVC-RBF both handle heterogeneity better by construction.
+    \item \textbf{Random Forest.} Subsumed by XGBoost. Both are tree ensembles, both are scale-invariant, both offer feature-importance measures. XGBoost's gradient-boosted loss and $\ell_1/\ell_2$ regularisation strictly dominate RF's bagged trees on tabular ML benchmarks, and RF's 68.76\% on CirCor with MFCC features \citep{fuadah2023} suggests it will trail XGBoost on our richer feature set too. Including both duplicates a paradigm.
+    \item \textbf{Decision Tree.} Prohibited by the module constraint as a standalone classifier; technically also high-variance and weak on correlated audio features. Its strengths are subsumed by XGBoost.
+    \item \textbf{Neural Networks (MLP, CNN, RNN, Transformer).} Reserved for the ANN module. Also: poor calibration \citep{guo2017}, weaker interpretability, higher compute requirements---all opposed to the project's deployment motivation.
+    \item \textbf{AdaBoost / LightGBM / CatBoost.} Boosting variants---AdaBoost is older and is typically used in hybrid pipelines with CNNs; LightGBM and CatBoost are modern but duplicate XGBoost's paradigm. XGBoost \citep{chen2016xgboost} is chosen for its maturity, prevalence in CirCor submissions \citep{rohr2024heart2beat, walker2022dbres}, and $\ell_1/\ell_2$ regularisation strength.
+    \item \textbf{Naive Bayes.} Assumes conditional independence of features. MFCC, wavelet, spectral, and fractal features are all derived from the same underlying signal and are strongly correlated---a core assumption violation.
+    \item \textbf{Hidden Markov Models (HMMs).} Standard for the sequential modelling of heart-cycle \textit{segmentation} (HSMM), but not for whole-recording classification; they belong in the segmentation preprocessing step rather than at the classifier level.
+    \item \textbf{Gaussian Mixture Models (GMMs).} A supervised per-class GMM classifier (fit one GMM per class and classify by Bayes rule, as in the GMM-UBM speaker-verification lineage) is a valid classical option; we exclude it because (a) GMM-UBM was designed for speaker verification under strong single-speaker priors, not multi-class clinical classification; (b) per-class GMMs are parameter-heavy on severely class-imbalanced data ($\approx$5:1 Absent-to-Present ratio here); (c) i-vector and x-vector successors are neural and out of scope. Crucially, GMM is \textit{not} the same as GPC---it is a parametric density-mixture model, not a kernel-posterior classifier.
+    \item \textbf{Linear SVM.} Nearly redundant with Lasso-LR on our feature set (both give linear boundaries; LR additionally produces sparsity).
+    \item \textbf{Polynomial-kernel SVM.} Requires degree selection; extrapolates poorly; RBF is uniformly preferable for engineered audio features.
+    \item \textbf{LDA / QDA.} Assume within-class multivariate normality; MFCC and wavelet-entropy distributions routinely violate this.
+    \item \textbf{Twin SVM (TWSVM).} Has been used with good results on PhysioNet 2016 but requires a non-standard implementation (not in \texttt{scikit-learn}), raising reproducibility concerns.
+\end{itemize}
+
+\subsection{Screening Pipeline}
+
+The five models form a complementary analytical framework mirroring clinical deployment:
+
+\begin{enumerate}
+    \item \textbf{Preprocessing + quality gating.} Raw WAV $\rightarrow$ bandpass $\rightarrow$ spike removal $\rightarrow$ wavelet denoise $\rightarrow$ normalise $\rightarrow$ SNR/clipping check. Poor-quality recordings prompt re-recording.
+    \item \textbf{Feature extraction.} 35+ features across five domains plus signal-quality features.
+    \item \textbf{Parsimony test.} Lasso-LR provides a linear baseline and an $\ell_1$-sparsity-derived feature-importance view.
+    \item \textbf{Primary classification.} SVC-RBF (SOTA benchmark match) and XGBoost (strongest expected on heterogeneous features) each predict murmur Present vs.\ Absent.
+    \item \textbf{Feature-importance diagnostic.} XGBoost gain importance and model-agnostic permutation importance are reported alongside Lasso-LR $\ell_1$ sparsity; agreement across the three is treated as a robustness check.
+    \item \textbf{Confidence scoring.} GPC provides a calibrated probability and predictive variance. A clinical threshold of 80\% is applied:
+    \begin{itemize}
+        \item $p > 0.8$ abnormal: refer for echocardiography.
+        \item $p > 0.8$ normal: no referral.
+        \item $p \in [0.2, 0.8]$: flag for re-recording or specialist review.
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Experimental Design}
+
+\textbf{Cross-validation.} 5-fold stratified CV at the \textit{patient} level. No patient's recordings appear in both training and test folds. Nested CV is used for hyperparameter tuning (inner 3-fold grid, outer 5-fold evaluation).
+
+\textbf{Evaluation metrics.} Accuracy, Sensitivity (recall-Present), Specificity, F1, AUC-ROC. For GPC and Platt-scaled SVC: Expected Calibration Error (ECE), Brier score, reliability diagrams. Predictive uncertainty on the held-out \textit{Unknown} subset is reported as secondary UQ validation.
+
+\textbf{Feature ablation (primary contribution).} Each of the five models is trained under five progressive feature sets:
+\begin{enumerate}[label=(\alph*)]
+    \item MFCCs only (26 features)
+    \item + spectral (32)
+    \item + wavelet (36)
+    \item + fractal/entropy (40)
+    \item + heart-cycle temporal (all)
+\end{enumerate}
+The $4 \text{ models} \times 5 \text{ feature sets} = 20$-cell grid is the paper's headline result. Accuracy gains are secondary; the ablation decomposition is the primary contribution because it is robust to whether the absolute numbers land at 77\% or 82\% and because it isolates the model-family $\times$ feature-family interactions that explain prior literature's inconsistent results.
+
+\textbf{Denoising ablation.} Every model is additionally trained with denoising off, to answer the open question of whether denoising materially helps classification.
+
+\textbf{Segmentation-robustness check.} Each model is additionally trained on the segmentation-robust subset (no heart-cycle temporal features), to report accuracy with and without segmentation dependence.
+
+\textbf{Parsimony test.} Lasso-LR vs.\ best nonlinear model is compared with a paired test across CV folds. A non-significant difference is reported honestly as a finding (per professor's principle).
+
+\textbf{Comparison with existing results.} Results are compared against the CirCor 2022 classical benchmarks reported in Fuadah et al.\ \citep{fuadah2023} (K-NN + MFCC 76.31\%, RF + MFCC 68.76\%, SVM + MFCC 58.81\%) and Vimalajeewa et al.\ \citep{wavelet2025} (SVM + wavelet 76.61\%, K-NN + wavelet $\approx$64\%, LR + wavelet 63.98\%), and against the Heart2Beat hybrid engineered+DL pipeline at weighted accuracy 0.751 \citep{rohr2024heart2beat}. Deep-learning benchmarks on the same dataset reach $\approx$0.78--0.83 \citep{challenge2022, walker2022dbres} but are outside this project's classical-ML scope. Note: the ``92.6\% SVM'' figure that circulates in some secondary sources refers to a private 283-volunteer dataset, \textit{not} CirCor, and is not a valid comparison.
+
+\subsection{Implementation}
+
+All models are implemented in Python using \texttt{scikit-learn} (LogisticRegression, SVC, GaussianProcessClassifier), \texttt{xgboost} (XGBClassifier), \texttt{librosa} (MFCC and spectral features \citep{librosa2015}), \texttt{pywt} (wavelet transform and denoising), \texttt{scipy} + \texttt{nolds} (fractal dimension, entropy), \texttt{soundfile} (WAV I/O), \texttt{numpy}/\texttt{pandas} (data handling), and \texttt{matplotlib}/\texttt{seaborn} (visualisation). If full GPC is intractable, \texttt{GPyTorch} is used for sparse variational GPC. Feature scaling uses \texttt{StandardScaler} fitted on the training fold only to prevent leakage (XGBoost is scale-invariant and receives un-scaled features). All code, feature artefacts, and trained models will be released under an open licence with fixed random seeds for bit-exact replication.
+
+% ============================================================
+\section{Expected Results}
+
+\begin{enumerate}
+    \item \textbf{Ablation finding (primary).} The ablation grid is expected to show progressive accuracy gains: MFCC-only $\approx$68--76\%, +spectral $\approx$70--77\%, +wavelet $\approx$74--78\% (approaching wavelet-only SVM at 76.61\% \citep{wavelet2025}), +fractal $\approx$76--79\%, +heart-cycle $\approx$78--80\% with 82\% as a stretch goal. The decomposition is the headline result regardless of the absolute ceiling.
+
+    \item \textbf{Classification performance (secondary).} With the full feature set, the strongest expected performer is XGBoost at 78--81\% murmur-detection accuracy on CirCor 2022 (2-class Present/Absent), reflecting its scale-invariance and multiplicative-interaction modelling on our heterogeneous feature set. SVC-RBF is expected at 77--80\%, modestly exceeding the 76.61\% published benchmark \citep{wavelet2025}. GPC is expected at 74--79\% with materially better calibration than SVC-RBF and XGBoost. Lasso-LR is expected at 68--74\%. Landing at 82\% would match fine-tuned audio foundation models and is treated as aspirational rather than targeted.
+
+    \item \textbf{Model-vs-feature-space finding.} Prior CirCor literature reports K-NN winning with homogeneous MFCC features \citep{fuadah2023} but SVC-RBF winning with homogeneous wavelet features \citep{wavelet2025}. Our hypothesis is that a heterogeneous 35+ feature set favours neither of those two but instead XGBoost, because tree splits are scale-invariant and model interactions natively. If XGBoost does win clearly on the full feature set, this is itself a methodologically interesting contribution: it generalises the model-feature-space compatibility observation into a principle.
+
+    \item \textbf{Feature importance (triangulated).} Lasso-LR $\ell_1$ sparsity, XGBoost gain importance, and model-agnostic permutation importance on SVC-RBF are expected to triangulate on wavelet entropy and MFCC deltas as top contributors, with heart-cycle temporal features and fractal dimension providing secondary information. Agreement across three independent importance measures is itself evidence of robustness.
+
+    \item \textbf{Denoising ablation.} Expected outcome: small positive or neutral effect of wavelet denoising on classification accuracy but material effect on estimated SNR, consistent with the ambiguous findings in the literature.
+
+    \item \textbf{Parsimony test.} If Lasso-LR matches any of the three nonlinear models within one standard deviation, this is reported as evidence that handcrafted features linearise the problem---consistent with the professor's injunction that ML complexity is only justified when simpler methods fail.
+
+    \item \textbf{Uncertainty quantification.} GPC is expected to be better calibrated than Platt-scaled SVC-RBF and XGBoost sigmoid probabilities by ECE. GPC predictive variance on the held-out \textit{Unknown} subset is expected to be significantly higher than on Present/Absent subsets (Wilcoxon), validating GPC as a clinical flag for ambiguous recordings.
+
+    \item \textbf{Clinical relevance to Nepal paediatric RHD screening (primary).} At the Nepal school-screening scale (107{,}340 children per \citep{nepal_rhd2023}) with underlying RHD prevalence 2.22 per 1000 (238 cases expected), raising auscultation-gate sensitivity by even a few percentage points directly increases the number of children correctly referred to echocardiography and receiving timely secondary-prophylaxis antibiotics. In high-burden districts such as Kalikot (5.47 per 1000), the absolute case yield of any sensitivity improvement is more than doubled. Comparable arguments apply to paediatric RHD screening in sub-Saharan Africa, South Asia, and rural Latin America.
+\end{enumerate}
+
+% ============================================================
+\section{Ethical, Social, and Legal Considerations}
+
+\textbf{Data ethics.} The CirCor 2022 dataset was collected under IRB approval with informed consent \citep{circor_data}, de-identified, and publicly released under the PhysioNet Credentialed Health Data License. No additional ethical approval is required for this secondary analysis.
+
+\textbf{Clinical responsibility.} This system is a screening aid, not a diagnostic device. A ``murmur detected'' output should trigger referral for echocardiography, not treatment. The UQ component is specifically designed to surface ambiguous cases rather than produce overconfident false negatives that could delay diagnosis.
+
+\textbf{Paediatric scope.} This project targets paediatric cardiac screening specifically. CirCor is a paediatric dataset; the Nepal deployment scenario is a paediatric RHD screening programme. Adult cardiac auscultation (where murmurs typically reflect acquired valve disease such as calcific aortic stenosis) is out of scope---the acoustic signatures differ and would require separate model training on an adult dataset. The choice to restrict to paediatric work is deliberate: it aligns training data, deployment population, and the highest-value Nepal clinical need (RHD prevention in school-age children).
+
+\textbf{Population transfer.} Within paediatric screening, CirCor was collected in rural Brazil; Nepalese deployment requires local validation before clinical use. This proposal does not claim clinical deployment, only that the screening workflow (auscultation as gatekeeper for echocardiographic referral) in rural Brazil matches the workflow in rural Nepal. Innocent murmurs (up to 80\% of paediatric murmurs) are not separately labelled in CirCor and are flagged as a limitation---the ``Murmur Present'' class in CirCor mixes innocent and pathological murmurs, so downstream referral policy in deployment would still require specialist interpretation.
+
+\textbf{Equity and access.} The deliberate restriction to classical ML is motivated by deployment: Lasso-LR, SVC-RBF, XGBoost, and recording-level GPC run on commodity hardware without GPU or internet connectivity, matching the constraints of primary-care offices and rural health posts worldwide.
+
+\textbf{Reproducibility.} All code, feature-extraction pipelines, model artifacts, and ablation results will be released under an open licence. Random seeds, scikit-learn versions, and feature hashes will be logged per fold.
+
+% ============================================================
+\section{Project Timeline}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{p{1.4cm}p{5.5cm}}
+\toprule
+\textbf{Week} & \textbf{Task} \\
+\midrule
+1 & Dataset download, preprocessing pipeline, quality gating, EDA on metadata and recordings \\
+2 & Feature-engineering pipeline (five domains), segmentation, feature-distribution audit \\
+3 & EDA deliverables, correlation analysis, denoising sensitivity check \\
+4--5 & Model training (Lasso-LR, SVC-RBF, XGBoost, GPC), nested CV tuning, 4$\times$5 ablation grid, denoising ablation \\
+6 & Calibration analysis (ECE, reliability diagrams), Unknown-subset UQ validation, triangulated feature-importance analysis (Lasso sparsity + XGBoost gain + SVC permutation) \\
+7--8 & Report writing, figures, parsimony write-up, final submission \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================
+
+\bibliographystyle{plainnat}
+\bibliography{references_proposal}
+
+\end{document}

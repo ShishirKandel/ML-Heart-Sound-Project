@@ -1,0 +1,162 @@
+% Proposal bibliography - 15 core references
+% Full bibliography with all literature is in references_heart.bib
+
+@misc{who2021,
+  author = {{World Health Organization}},
+  title = {Cardiovascular Diseases ({CVDs}) Fact Sheet},
+  year = {2021},
+  howpublished = {WHO Newsroom, Fact sheet, accessed 2026-04-26},
+  publisher = {World Health Organization},
+  url = {https://www.who.int/news-room/fact-sheets/detail/cardiovascular-diseases-(cvds)}
+}
+
+@article{lam2015,
+  author = {Lam, M. Z. C. and Lee, T. J. and Boey, P. Y. and Ng, W. F. and Hey, H. W. and Ho, K. Y. and Cheong, P. Y. K.},
+  title = {Factors influencing cardiac auscultation proficiency in physician trainees},
+  journal = {Singapore Medical Journal},
+  volume = {56},
+  number = {7},
+  pages = {380--384},
+  year = {2015},
+  note = {Established the 30-50\% primary-care GP murmur-detection accuracy figure widely cited in the auscultation-ML literature}
+}
+
+@article{dahl2022,
+  author = {Dahl, Lauritz Bredrup and Hasvold, Per and Arild, Edel and Hasvold, Toralf},
+  title = {Interrater and intrarater agreement on heart murmurs in primary care},
+  journal = {Scandinavian Journal of Primary Health Care},
+  volume = {40},
+  number = {4},
+  pages = {458--464},
+  year = {2022},
+  doi = {10.1080/02813432.2022.2159204},
+  note = {Inter-observer kappa = 0.48 among 5 cardiologists on 100 patients},
+  url = {https://www.tandfonline.com/doi/full/10.1080/02813432.2022.2159204}
+}
+
+@article{challenge2022,
+  author = {Reyna, Matthew A. and Kiarashi, Yasin and Elola, Andoni and others},
+  title = {Heart Murmur Detection from Phonocardiogram Recordings: The George B. Moody PhysioNet Challenge 2022},
+  journal = {PLOS Digital Health},
+  volume = {2},
+  number = {9},
+  pages = {e0000324},
+  year = {2023},
+  url = {https://journals.plos.org/digitalhealth/article?id=10.1371/journal.pdig.0000324}
+}
+
+@misc{circor_data,
+  author = {Oliveira, Jorge and Renna, Francesco and Costa, Paulo Dias and others},
+  title = {The {CirCor DigiScope} Phonocardiogram Dataset, v1.0.3},
+  year = {2022},
+  howpublished = {PhysioNet},
+  url = {https://physionet.org/content/circor-heart-sound/1.0.3/}
+}
+
+@article{fuadah2023,
+  author = {Fuadah, Yunendah Nur and Pramudito, Muhammad Adnan and Lim, Ki Moo},
+  title = {An Optimal Approach for Heart Sound Classification Using Grid Search in Hyperparameter Optimization of Machine Learning},
+  journal = {Bioengineering},
+  volume = {10},
+  number = {1},
+  pages = {45},
+  year = {2023},
+  doi = {10.3390/bioengineering10010045},
+  note = {CirCor 2022 MFCC benchmark: K-NN 76.31\%, RF 68.76\%, ANN 65.18\%, SVM 58.81\%},
+  url = {https://www.mdpi.com/2306-5354/10/1/45}
+}
+
+@article{wavelet2025,
+  author = {Vimalajeewa, Dixon and Lee, Chihoon and Vidakovic, Brani},
+  title = {Multiscale Analysis of Heart Sound Signals in the Wavelet Domain for Heart Murmur Detection},
+  journal = {Scientific Reports},
+  volume = {15},
+  pages = {10315},
+  year = {2025},
+  doi = {10.1038/s41598-025-93989-0},
+  note = {Best pure-classical on CirCor 2022: SVM-RBF 76.61\% with 10 wavelet features},
+  url = {https://www.nature.com/articles/s41598-025-93989-0}
+}
+
+@article{rohr2024heart2beat,
+  author = {Rohr, M. and M\"uller, B. and Dill, S. and G\"uney, G. and Hoog Antink, C.},
+  title = {Multiple Instance Learning Framework can Facilitate Explainability in Murmur Detection},
+  journal = {PLOS Digital Health},
+  volume = {3},
+  number = {3},
+  pages = {e0000461},
+  year = {2024},
+  doi = {10.1371/journal.pdig.0000461},
+  note = {Heart2Beat team. PANN + handcrafted feature MIL pipeline on CirCor 2022 (PhysioNet Challenge 2022, team Heart2Beat, rank 12/40, weighted accuracy 0.714 on hidden test)},
+  url = {https://journals.plos.org/digitalhealth/article?id=10.1371/journal.pdig.0000461}
+}
+
+@inproceedings{walker2022dbres,
+  author = {Walker, Benjamin and Krones, Felicity and Kiskin, Ivan and Parsons, Guy and Lipton, Alexander and Mahdi, Adam},
+  title = {Dual {Bayesian} {ResNet}: A Deep Learning Approach to Heart Murmur Detection},
+  booktitle = {Computing in Cardiology},
+  year = {2022},
+  note = {Dual Bayesian ResNet + MC Dropout + XGBoost integration, Challenge rank 4, weighted accuracy 0.771},
+  url = {https://www.cinc.org/archives/2022/pdf/CinC2022-355.pdf}
+}
+
+@article{muygps2024,
+  author = {Goumiri, Im\`ene R. and Priest, Benjamin W. and Schneider, Michael D.},
+  title = {Enhancing Electrocardiography Data Classification Confidence: A Robust {Gaussian} Process Approach ({MuyGPs})},
+  journal = {arXiv preprint},
+  number = {arXiv:2409.04642},
+  year = {2024},
+  doi = {10.48550/arXiv.2409.04642},
+  note = {Robust GPC on ECG. Closest prior art for kernel-posterior GPC on cardiac signals (ECG, not PCG)},
+  url = {https://arxiv.org/abs/2409.04642}
+}
+
+@inproceedings{guo2017,
+  author = {Guo, Chuan and Pleiss, Geoff and Sun, Yu and Weinberger, Kilian Q.},
+  title = {On Calibration of Modern Neural Networks},
+  booktitle = {Proceedings of the 34th International Conference on Machine Learning (ICML)},
+  pages = {1321--1330},
+  year = {2017},
+  url = {https://proceedings.mlr.press/v70/guo17a.html}
+}
+
+@book{rasmussen2006,
+  author = {Rasmussen, Carl Edward and Williams, Christopher K. I.},
+  title = {Gaussian Processes for Machine Learning},
+  publisher = {MIT Press},
+  year = {2006},
+  url = {https://gaussianprocess.org/gpml/}
+}
+
+@inproceedings{chen2016xgboost,
+  author = {Chen, Tianqi and Guestrin, Carlos},
+  title = {{XGBoost}: A Scalable Tree Boosting System},
+  booktitle = {Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining},
+  year = {2016},
+  pages = {785--794},
+  doi = {10.1145/2939672.2939785},
+  url = {https://arxiv.org/abs/1603.02754}
+}
+
+@article{nepal_rhd2023,
+  author = {Shrestha, Ngima M. and Shrestha, Sujata and Sharma, Sanjeev R. and Joshi, Yagya P. and Pradhan, Yagya M. and others},
+  title = {Rheumatic heart disease in school-attending Nepalese children: a descriptive analysis of the national heart screening database},
+  journal = {Indian Heart Journal},
+  volume = {75},
+  number = {3},
+  pages = {198--204},
+  year = {2023},
+  doi = {10.1016/j.ihj.2023.04.008},
+  note = {107{,}340 Nepalese schoolchildren clinically screened, RHD prevalence 2.22 per 1000 (range 1.2--5.47), isolated MR 70.7\% of cases},
+  url = {https://www.sciencedirect.com/science/article/pii/S0019483223001256}
+}
+
+@inproceedings{librosa2015,
+  author = {McFee, Brian and Raffel, Colin and Liang, Dawen and Ellis, Daniel P. W. and McVicar, Matt and Battenberg, Eric and Nieto, Oriol},
+  title = {librosa: Audio and Music Signal Analysis in {Python}},
+  booktitle = {Proceedings of the 14th Python in Science Conference (SciPy 2015)},
+  pages = {18--25},
+  year = {2015},
+  doi = {10.25080/Majora-7b98e3ed-003},
+  url = {https://librosa.org/doc/main/}
+}
