@@ -6,6 +6,13 @@
 \usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=black,
+    urlcolor=blue,
+    pdfborder={0 0 0}
+}
 \usepackage{url}
 \usepackage{natbib}
 \usepackage{enumitem}
@@ -477,9 +484,9 @@ Cardiac auscultation is the global gatekeeper for paediatric structural heart di
 
 All experiment artefacts are provided alongside this report: \texttt{heart\_murmur\_pipeline.ipynb} (full reproducible Jupyter notebook), \texttt{run\_models.py} (5$\times$5 ablation grid), \texttt{run\_smote.py} (imbalance sensitivity analysis), \texttt{uq\_unknown.py} (Unknown-class entropy validation), \texttt{error\_analysis.py} (Section~\ref{sec:erroranalysis}), per-fold result CSVs, EDA outputs in \texttt{eda\_outputs/}, and trained \texttt{.pkl} models with scaler in \texttt{models/}. Reproduction steps are documented in \texttt{README.md}.
 
-\textbf{Screencast walkthrough:} \url{https://youtu.be/WSxsPEg_eWc}
+\textbf{YouTube video:} \url{https://youtu.be/WSxsPEg_eWc}
 
-\textbf{Source code repository:} \url{https://github.com/ShishirKandel/ML-Heart-Sound-Project}
+\textbf{GitHub source code:} \url{https://github.com/ShishirKandel/ML-Heart-Sound-Project}
 
 % ============================================================
 
