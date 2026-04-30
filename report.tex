@@ -25,6 +25,7 @@
 \usetikzlibrary{positioning, arrows.meta, shapes.geometric, fit, backgrounds}
 
 \setlength{\columnsep}{0.6cm}
+\raggedbottom
 
 \title{\textbf{Uncertainty-Aware Heart Murmur Detection from Phonocardiogram Recordings Using Classical Machine Learning Approaches: A Multi-Domain Feature Engineering and Ablation Study on the CirCor 2022 Dataset}}
 
@@ -38,19 +39,19 @@
 
 % ============================================================
 \begin{abstract}
-General practitioners detect heart murmurs with only 30--50\% accuracy, making auscultation an unreliable gatekeeper for paediatric rheumatic-heart-disease screening in Nepal. We engineer a 48-feature multi-domain pipeline (MFCC, spectral, wavelet, fractal, heart-cycle temporal) on the PhysioNet/CinC 2022 CirCor DigiScope dataset (3{,}163 paediatric recordings, 942 patients) and evaluate five classical models in a $5 \times 5$ ablation grid under 5-fold patient-level cross-validation. Our Gaussian Process Classifier hits \textbf{84.0\% accuracy} (95\% CI 83.4--84.7\%, AUC 0.752, ECE 0.046), 7.4 points above the published pure-classical SOTA (76.61\%); the lower-CI bound excludes the benchmark. We see a sharp model-feature interaction in the grid: GPC F1 leaps from 0.000 to 0.404 only after \textit{fractal} features are added. Class-weighted loss strictly outperforms SMOTE on every metric for our best model. On held-out \textit{Unknown} recordings, GPC's predictive entropy runs significantly above what we see on \textit{Absent} (Mann-Whitney $p = 0.010$), supporting its use as a clinical confidence layer.
+General practitioners detect heart murmurs with only 30--50\% accuracy, making auscultation an unreliable gatekeeper for paediatric rheumatic-heart-disease screening in Nepal. We engineer a 48-feature multi-domain pipeline (MFCC, spectral, wavelet, fractal, heart-cycle temporal) on the PhysioNet/CinC 2022 CirCor DigiScope dataset (3{,}163 paediatric recordings, 942 patients) and evaluate five classical models in a $5 \times 5$ ablation grid under 5-fold patient-level cross-validation. Our Gaussian Process Classifier reaches \textbf{84.0\% accuracy} (95\% CI 83.4--84.7\%, AUC 0.752, ECE 0.046). The published pure-classical SOTA stands at 76.61\%, so we clear it by 7.4 points; the lower-CI bound alone exceeds the benchmark. One interaction in the grid stands out: once \textit{fractal} features are included, GPC F1 climbs from 0.000 to 0.404. Class-weighted loss strictly outperforms SMOTE on every metric for our best model. Compared with \textit{Absent} recordings, GPC's predictive entropy is significantly higher on held-out \textit{Unknown} ones (Mann-Whitney $p = 0.010$), which supports use as a clinical confidence layer.
 \end{abstract}
 
 % ============================================================
 \section{Introduction}
 
-Rheumatic heart disease (RHD) sits among Nepal's most pressing paediatric cardiovascular problems. A national school-screening programme of 107{,}340 schoolchildren found RHD prevalence at 2.22 per 1000 overall, climbing to 5.47 per 1000 in high-burden districts like Kalikot \citep{nepal_rhd2023}. Isolated mitral regurgitation, a systolic murmur, made up 70.7\% of RHD cases. The programme uses cardiac auscultation as its first-stage gatekeeper: only children with an audible murmur of grade $>$1 are referred for echocardiography. Every false negative in this workflow is a child with progressive valvular disease who fails to receive the secondary-prophylaxis antibiotics that halt RHD progression.
+Among Nepal's most pressing paediatric cardiovascular problems is rheumatic heart disease (RHD). A national school-screening programme of 107{,}340 schoolchildren found RHD prevalence at 2.22 per 1000 overall, climbing to 5.47 per 1000 in high-burden districts like Kalikot \citep{nepal_rhd2023}. Isolated mitral regurgitation, a systolic murmur, made up 70.7\% of RHD cases. The programme uses cardiac auscultation as its first-stage gatekeeper: only children with an audible murmur of grade $>$1 are referred for echocardiography. Every false negative in this workflow is a child with progressive valvular disease who fails to receive the secondary-prophylaxis antibiotics that halt RHD progression.
 
 Nepal is not alone here: cardiovascular disease leads global mortality \citep{who2021}, primary-care auscultation accuracy sits at just 30--50\% \citep{lam2015}, and cardiologist inter-observer agreement sits at $\kappa = 0.48$ \citep{dahl2022}. Any pipeline that helps with this generalises across contexts.
 
-\textit{Why a Brazilian dataset for a Nepal-motivated project?} Searching standard public repositories (PhysioNet, Kaggle, UCI, Mendeley, Zenodo, IEEE DataPort) and the paediatric-cardiology literature, we found no publicly available Nepali PCG dataset. We therefore use the PhysioNet 2022 CirCor DigiScope corpus \citep{challenge2022, circor_data} (rural Para\'{i}ba, Brazil) as a methodology-development proxy: it shares the Nepal context's paediatric population with high RHD-like lesion prevalence, rural deployment with generalist-clinician auscultation, Littmann 3200 hardware, and the ``auscultation $\rightarrow$ echocardiography referral'' workflow. Nepal deployment would require local validation (Section~\ref{sec:discussion}).
+\textit{Why a Brazilian dataset for a Nepal-motivated project?} Across standard public repositories (PhysioNet, Kaggle, UCI, Mendeley, Zenodo, IEEE DataPort) and the paediatric-cardiology literature, no publicly available Nepali PCG dataset turned up. We therefore use the PhysioNet 2022 CirCor DigiScope corpus \citep{challenge2022, circor_data} (rural Para\'{i}ba, Brazil) as a methodology-development proxy: it shares the Nepal context's paediatric population with high RHD-like lesion prevalence, rural deployment with generalist-clinician auscultation, Littmann 3200 hardware, and the ``auscultation $\rightarrow$ echocardiography referral'' workflow. Nepal deployment would require local validation (Section~\ref{sec:discussion}).
 
-CirCor was built for this paediatric screening scenario: 942 patients in the public split. As many as 80\% of paediatric murmurs are \textit{innocent} (vibratory, benign) yet must be told apart from pathological ones.
+CirCor was built for this paediatric screening scenario: 942 patients in the public split. Up to 80\% of paediatric murmurs are \textit{innocent} (vibratory, benign), yet still need separating from pathological ones.
 
 \textbf{Objectives.} This project pursues two objectives:
 \begin{enumerate}[label=\textbf{O\arabic*:}, leftmargin=*]
@@ -61,7 +62,7 @@ CirCor was built for this paediatric screening scenario: 942 patients in the pub
 % ============================================================
 \section{Related Work}
 
-Fuadah et al.\ \citep{fuadah2023} tested K-NN, Random Forest, ANN, and SVM on MFCC features, with K-NN 76.31\%, RF 68.76\%, ANN 65.18\%, SVM 58.81\%. Vimalajeewa et al.\ \citep{wavelet2025} ran LR, K-NN, SVM, and a feed-forward NN over ten multiscale wavelet+fractal features; their SVM-RBF hit 76.61\% accuracy (AUC 0.741), the best published \textit{pure classical} result and our direct benchmark. Which model wins on CirCor depends heavily on the feature set: K-NN leads on MFCC, SVM on wavelet.
+On MFCC features, Fuadah et al.\ \citep{fuadah2023} tested K-NN, Random Forest, ANN, and SVM, scoring K-NN 76.31\%, RF 68.76\%, ANN 65.18\%, SVM 58.81\%. With ten multiscale wavelet+fractal features instead, Vimalajeewa et al.\ \citep{wavelet2025} compared LR, K-NN, SVM, and a feed-forward NN; their SVM-RBF reached 76.61\% accuracy (AUC 0.741), the best published \textit{pure classical} result and our direct benchmark. Feature choice drives model rank on CirCor: MFCC favours K-NN, wavelet favours SVM.
 
 The Heart2Beat MIL framework \citep{rohr2024heart2beat} combines a pretrained audio neural network with handcrafted features (weighted accuracy 0.714, Challenge rank 12/40), but is a hybrid architecture rather than purely classical. To our knowledge, no published study combines MFCC, spectral, wavelet, fractal, \textit{and} heart-cycle features on CirCor 2022 in a single classical pipeline.
 
@@ -72,13 +73,15 @@ For uncertainty quantification, prior CirCor work relies on deep-learning approx
 
 The CirCor DigiScope dataset \citep{circor_data, challenge2022} holds 5{,}272 recordings from 1{,}452 mostly-paediatric patients; 3{,}163 recordings from 942 patients form the public training split. The recordings come from rural Paraíba, Brazil, captured on Littmann 3200 digital stethoscopes at up to five auscultation sites per patient (AV, MV, PV, TV, Phc), each paired with an expert \texttt{.tsv} S1/S2 segmentation and \texttt{.txt} metadata. The main task is binary murmur detection (Present vs.\ Absent). At recording level: 2{,}391 Absent, 616 Present, 156 Unknown ($\approx$4:1 imbalance). Unknown recordings are excluded from training but retained as a held-out set for uncertainty-on-Unknown validation. The recordings carry realistic ambulatory noise.
 
+\medskip
+
 \subsection{Exploratory data analysis}
 
 Table~\ref{tab:eda} summarises the public training cohort: overwhelmingly paediatric (864 of 942 with recorded age class), sex-balanced, with school-age height/weight medians (115\,cm, 20.4\,kg), confirming alignment with our Nepal RHD use case.
 
 \begin{table}[!htbp]
 \centering
-\caption{CirCor 2022 public-training cohort. The Murmur $\times$ Outcome cross-tab shows a real but imperfect auscultatory-pathology link --- hence the held-out Unknown-class analysis.}
+\caption{CirCor 2022 public-training cohort. Across the Murmur $\times$ Outcome cross-tab, the auscultatory-pathology link is real but imperfect, motivating the held-out Unknown-class analysis.}
 \label{tab:eda}
 \small
 \begin{tabular}{lr}
@@ -100,7 +103,7 @@ Weight (kg), median [IQR]               & 20.4 [12.5, 31.2] \\
 \end{tabular}
 \end{table}
 
-Auditing 150 recordings post-preprocessing, we find durations roughly consistent across classes (median $\sim$23\,s, IQR 19--29\,s) with clipping $<$0.1\%. Our post-bandpass SNR proxy comes in marginally higher for Present (median $-0.81$\,dB) than Absent ($-4.71$\,dB), so gross quality differences cannot explain the classifier results. Full histograms live in \texttt{eda\_outputs/}.
+Across a 150-recording sample audited post-preprocessing, durations stay roughly consistent between classes (median $\sim$23\,s, IQR 19--29\,s) with clipping $<$0.1\%. Post-bandpass, the SNR proxy is marginally higher for Present (median $-0.81$\,dB) than Absent ($-4.71$\,dB), so gross quality differences cannot drive the classifier results. Full histograms live in \texttt{eda\_outputs/}.
 
 % ============================================================
 \section{Methodology}
@@ -109,7 +112,7 @@ Auditing 150 recordings post-preprocessing, we find durations roughly consistent
 
 Figure~\ref{fig:pipeline} summarises the end-to-end pipeline from a raw WAV recording to a classified prediction with calibrated probability. Each stage is described in the subsections that follow.
 
-\begin{figure}[!t]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}[
   node distance=2.5mm and 4mm,
@@ -139,15 +142,14 @@ Figure~\ref{fig:pipeline} summarises the end-to-end pipeline from a raw WAV reco
 \caption{End-to-end pipeline: raw WAV through preprocessing, 48-feature extraction, patient-level 5-fold CV, training of five classifiers, and evaluation under five feature sets and three imbalance strategies.}
 \label{fig:pipeline}
 \end{figure}
-\FloatBarrier
 
 \subsection{Preprocessing}
 
-Our six-stage preprocessing pipeline: resample to 4000\,Hz, strip DC offset, apply a 4th-order zero-phase Butterworth bandpass at 25--450\,Hz (cardiac-sound band), zero out spikes above $30\times$ MAD, run Daubechies-4 wavelet soft-thresholding (universal threshold $\sigma\sqrt{2\log n}$, MAD-estimated $\sigma$), and peak-normalise to $[-1,1]$.
+Six preprocessing stages run in sequence: resampling to 4000\,Hz, DC-offset removal, a 4th-order zero-phase Butterworth bandpass at 25--450\,Hz (cardiac-sound band), spike removal at $30\times$ MAD, Daubechies-4 wavelet soft-thresholding (universal threshold $\sigma\sqrt{2\log n}$, MAD-estimated $\sigma$), and peak normalisation to $[-1,1]$.
 
 \subsection{Feature engineering}
 
-48 features spanning five engineered domains plus two quality features, all computed via \texttt{librosa} \citep{librosa2015}:
+All 48 features (five engineered domains plus two quality features) come from \texttt{librosa} \citep{librosa2015}:
 \begin{itemize}[leftmargin=*, itemsep=0.05em]
     \item \textbf{MFCC (26)}: 13 coefficients + 13 first-order deltas, mean over 25\,ms frames (10\,ms hop).
     \item \textbf{Spectral (6)}: centroid, bandwidth, rolloff, flatness, zero-crossing rate, RMS energy.
@@ -185,7 +187,7 @@ Five classical classifiers spanning distinct paradigms:
 
 \subsection{Primary ablation grid}
 
-Table~\ref{tab:ablation} lists accuracy (mean across 5 folds) for the $5 \times 5$ grid, and Figure~\ref{fig:ablation} plots it as a heatmap.
+Accuracy across the $5 \times 5$ grid (mean over 5 folds) appears in Table~\ref{tab:ablation} and Figure~\ref{fig:ablation}.
 
 \begin{table}[!htbp]
 \centering
@@ -242,7 +244,7 @@ GPC      & $\mathbf{0.840 \pm 0.008}$ & $0.436 \pm 0.066$ & $\mathbf{0.752 \pm 0
 \label{fig:metrics}
 \end{figure}
 
-Table~\ref{tab:full} and Figure~\ref{fig:metrics} report all metrics on the full 48-feature set. GPC tops the table on accuracy (\textbf{84.03\%}, 95\% CI [83.4\%, 84.7\%]), AUC (0.752), and calibration (ECE 0.046, Brier 0.128). Its CI lower bound clears the published pure-classical SOTA of 76.61\% \citep{wavelet2025} by 6.8 points, backing up the +7.4-point lift. K-NN's degenerate F1 (0.101) traces to scikit-learn's missing native \texttt{class\_weight} for K-NN, not a feature-space issue. Table~\ref{tab:sota} positions our result against published CirCor 2022 work.
+All metrics on the full 48-feature set appear in Table~\ref{tab:full} and Figure~\ref{fig:metrics}. GPC leads on accuracy (\textbf{84.03\%}, 95\% CI [83.4\%, 84.7\%]), AUC (0.752), and calibration (ECE 0.046, Brier 0.128). Even its CI lower bound sits 6.8 points past the published pure-classical SOTA of 76.61\% \citep{wavelet2025}, so the +7.4-point lift holds. As for K-NN's degenerate F1 (0.101): scikit-learn does not natively pass \texttt{class\_weight} to K-NN, an implementation gap rather than a feature-space failure. Table~\ref{tab:sota} positions our result against published CirCor 2022 work.
 
 \begin{table}[!htbp]
 \centering
@@ -281,7 +283,7 @@ GPC's F1 transitions from 0 (degenerate, all-Absent) at sets (a)--(c) to 0.404 a
 
 \subsection{Calibration and uncertainty on Unknown recordings}
 
-Figure~\ref{fig:calib} shows GPC achieves the lowest ECE and Brier. Across 156 held-out Unknown recordings, GPC's predictive entropy runs significantly above Absent (Mann-Whitney $p = 0.010$) but not above Present ($p = 1.0$) --- Present remains GPC's hardest class.
+GPC achieves the lowest ECE and Brier in Figure~\ref{fig:calib}. On the 156 held-out Unknown recordings, its predictive entropy is significantly above Absent (Mann-Whitney $p = 0.010$) but not above Present ($p = 1.0$); Present is, after all, GPC's hardest class.
 
 \begin{figure}[!htbp]
 \centering
@@ -323,7 +325,7 @@ mfcc\_6\_mean       & \phantom{0}8.38 & $-$0.30 \\
 \label{fig:fi}
 \end{figure}
 
-All five feature families turn up in the top ten (MFCC$\times$3, spectral$\times$2, heart-cycle$\times$2, fractal$\times$2, quality$\times$1) per Table~\ref{tab:fi} and Figure~\ref{fig:fi}, with nine of ten carrying non-zero Lasso coefficients --- empirical backing for the multi-domain hypothesis.
+Per Table~\ref{tab:fi} and Figure~\ref{fig:fi}, the top ten covers all five feature families (MFCC$\times$3, spectral$\times$2, heart-cycle$\times$2, fractal$\times$2, quality$\times$1), and nine of ten carry non-zero Lasso coefficients, empirically backing the multi-domain hypothesis.
 \FloatBarrier
 
 \subsection{Imbalance strategy: class weights vs. SMOTE vs. random oversampling}\label{sec:smote}
@@ -332,7 +334,7 @@ Table~\ref{tab:smote} and Figure~\ref{fig:smote} compare class weights, SMOTE, a
 
 \begin{table}[!htbp]
 \centering
-\caption{AUC under each imbalance strategy. Class-weighted loss beats SMOTE outright for our best model (GPC) and wins on 4 of 5 models overall.}
+\caption{AUC by imbalance strategy. Class-weighted loss beats SMOTE outright on our best model (GPC) and tops 4 of 5 models overall.}
 \label{tab:smote}
 \small
 \begin{tabular}{lrrr}
@@ -355,7 +357,7 @@ GPC      & \textbf{0.752} & 0.695 & 0.698 \\
 \label{fig:smote}
 \end{figure}
 
-Class weights beat SMOTE on every GPC metric (acc 0.840 vs.\ 0.767; AUC 0.752 vs.\ 0.695; F1 0.436 vs.\ 0.413), with RandomOverSampler sitting between the two --- consistent with the geometric reading in Section~\ref{sec:discussion}.
+On every GPC metric, class weights beat SMOTE (acc 0.840 vs.\ 0.767; AUC 0.752 vs.\ 0.695; F1 0.436 vs.\ 0.413). RandomOverSampler sits between the two, in line with the geometric reading in Section~\ref{sec:discussion}.
 \FloatBarrier
 
 \subsection{Error analysis}\label{sec:erroranalysis}
@@ -387,16 +389,16 @@ The all-miss subset has equivalent median SNR (11.98 vs.\ 11.75 dB), so failure 
 \subsection{Objective evaluation}
 
 \begin{itemize}[leftmargin=*, itemsep=0.05em]
-    \item \textbf{O1 (multi-domain pipeline beats classical SOTA): MET.} GPC hits 84.03\% accuracy and 0.752 AUC, beating Vimalajeewa et al.'s 76.61\% / 0.741 by 7.4 / 1.1 points. The ablation grid shows monotonic accuracy gains across feature sets and pinpoints fractal features as the critical addition for GPC. All five engineered families show in the top-10 importance ranking.
-    \item \textbf{O2 (calibrated uncertainty via GPC): PARTIALLY MET.} GPC posts the lowest ECE (0.046) and Brier score (0.128), backing the calibration claim. Predictive entropy on Unknown recordings runs significantly above Absent ($p = 0.010$) yet \textit{not} above Present ($p = 1.0$), since Present cases are GPC's hardest class. The first half of O2 is fully met; the second half is partially met.
+    \item \textbf{O1 (multi-domain pipeline beats classical SOTA): MET.} Past Vimalajeewa et al.'s 76.61\% / 0.741, GPC reaches 84.03\% accuracy and 0.752 AUC; that's 7.4 and 1.1 points up. The ablation grid shows monotonic accuracy gains across feature sets and pinpoints fractal features as the critical addition for GPC. The top-10 importance ranking covers all five engineered families.
+    \item \textbf{O2 (calibrated uncertainty via GPC): PARTIALLY MET.} Across all five models, GPC posts the lowest ECE (0.046) and Brier score (0.128), backing the calibration claim. On Unknown recordings, predictive entropy runs significantly above Absent ($p = 0.010$) yet \textit{not} above Present ($p = 1.0$); Present cases are GPC's hardest class. So the first half of O2 is fully met, the second half only partially.
 \end{itemize}
 
 % ============================================================
 \section{Discussion}\label{sec:discussion}
 
-\textbf{Headline finding: GPC + 48 multi-domain features sets a new pure-classical SOTA on CirCor 2022.} 84.0\% accuracy (AUC 0.752) lifts 7.4 points above the published 76.61\% benchmark and stays competitive with deep-learning work on the same dataset, e.g.\ Walker et al.'s DBRes hybrid at 77.1\% weighted accuracy \citep{walker2022dbres}. This demonstrates that careful classical feature engineering on this paediatric screening dataset still has substantial room above existing classical baselines.
+\textbf{Headline finding: GPC + 48 multi-domain features sets a new pure-classical SOTA on CirCor 2022.} Beyond the published 76.61\% benchmark by 7.4 points, our 84.0\% accuracy (AUC 0.752) is competitive with deep-learning work on the same dataset, e.g.\ Walker et al.'s DBRes hybrid at 77.1\% weighted accuracy \citep{walker2022dbres}. This demonstrates that careful classical feature engineering on this paediatric screening dataset still has substantial room above existing classical baselines.
 
-\textbf{The fractal jump.} The most striking experimental finding is GPC's F1 jumping from 0.000 to 0.404 the moment fractal features come in. Fractal dimension, sample entropy, and Hurst exponent are not part of the standard audio feature set; their role here is to give the RBF kernel a geometry in which the Present class becomes separable. MFCC and wavelet features alone do not give this structure. If replicated on external paediatric PCG datasets, this would suggest complexity features should become a default component of Bayesian-kernel audio classifiers.
+\textbf{The fractal jump.} The most striking experimental finding is GPC's F1 jumping from 0.000 to 0.404 the moment fractal features come in. Fractal dimension, sample entropy, and Hurst exponent are not part of the standard audio feature set; their role here is to give the RBF kernel a geometry in which the Present class becomes separable. Neither MFCC nor wavelet features alone deliver this structure. If replicated on external paediatric PCG datasets, this would suggest complexity features should become a default component of Bayesian-kernel audio classifiers.
 
 \textbf{Class weights beat SMOTE: a geometric explanation.} SMOTE interpolates linearly between Present-class feature vectors, but our 48-dimensional space mixes heterogeneous units (cepstral, spectral, wavelet entropy, fractal dimension, heart-cycle durations). The synthetic manifold is statistically smooth but acoustically meaningless and fails to generalise to held-out real recordings. Class-weighted loss re-weights real-sample gradients without inventing new ones; RandomOverSampler (verbatim copies, no interpolation) lands between the two on every metric, supporting this interpretation. \textit{Synthetic oversampling assumes a feature manifold that does not hold for hand-crafted multi-domain audio features.}
 
@@ -404,7 +406,7 @@ The all-miss subset has equivalent median SNR (11.98 vs.\ 11.75 dB), so failure 
 
 \textbf{Bias, variance, overfitting, and regularisation.} Three structural defences guard against overfitting: (1) patient-level 5-fold CV (no identity leakage); (2) explicit regularisation in every classifier ($\ell_1$ for Lasso-LR, $C=10$ for SVC-RBF, $\ell_2$+subsampling for XGBoost, marginal-likelihood-optimised length-scale for GPC); (3) small fold-to-fold std ($\sigma=0.0075$ on GPC accuracy). The 95\% CI on GPC ([0.834, 0.847]) excludes the published SOTA by a wide margin, so the lift is not a single-fold artefact. Underfitting is visible only in Lasso-LR, the intentional parsimony baseline.
 
-\textbf{Clinical interpretation for Nepal RHD screening.} GPC's 97.7\% specificity fits high-confidence referral, but its 30.6\% sensitivity is too low for a first-stage gate; Lasso-LR (sensitivity 61.4\%, specificity 73.6\%) fits there. A two-stage deployment (Lasso-LR gate + GPC overlay) falls naturally out of the experimental design (Figure~\ref{fig:deployment}).
+\textbf{Clinical interpretation for Nepal RHD screening.} For high-confidence referral, GPC's 97.7\% specificity is right; its 30.6\% sensitivity, though, falls short of what a first-stage gate needs, where Lasso-LR (sensitivity 61.4\%, specificity 73.6\%) works better. A two-stage deployment (Lasso-LR gate + GPC overlay) falls naturally out of the experimental design (Figure~\ref{fig:deployment}).
 
 \begin{figure*}[!t]
 \centering
@@ -459,13 +461,13 @@ The all-miss subset has equivalent median SNR (11.98 vs.\ 11.75 dB), so failure 
 \label{fig:deployment}
 \end{figure*}
 
-\textbf{Limitations.} (1) Hyperparameters are fixed at conservative defaults; nested CV would likely lift each model by a few points. (2) CirCor is Brazilian paediatric; deployment on Nepalese recordings requires local validation. (3) Innocent murmurs (up to 80\% of paediatric murmurs) carry no separate label, so ``Present'' lumps innocent and pathological cases together; the 213-of-616 all-miss recordings (Section~\ref{sec:erroranalysis}) probably hold many innocent murmurs.
+\textbf{Limitations.} (1) Hyperparameters are fixed at conservative defaults; nested CV would likely lift each model by a few points. (2) CirCor is Brazilian paediatric; deployment on Nepalese recordings requires local validation. (3) Since innocent murmurs (up to 80\% of paediatric murmurs) have no separate label, ``Present'' lumps innocent and pathological cases together; many of the 213-of-616 all-miss recordings (Section~\ref{sec:erroranalysis}) are probably innocent murmurs.
 
 \textbf{Ethics, social, and legal considerations.}
 
-\textit{Population transfer assumption.} CirCor was collected in rural Brazil; the motivating deployment is rural Nepal. We do not claim clinical deployability without local validation. While heart-sound acoustics are physiologically universal in healthy children, mitral-regurgitation murmur prevalence (the dominant Nepal RHD lesion) runs higher in the Nepal cohort than in the Brazilian source, shifting the prior and the optimal decision threshold. A prospective Nepal study would need IRB approval from a Nepalese institution, parental consent and child assent in Nepali, and threshold re-calibration against a Nepali validation cohort. The dataset was collected under IRB approval with informed consent, and we use it here under the PhysioNet Credentialed Health Data Licence.
+\textit{Population transfer assumption.} CirCor was collected in rural Brazil; the motivating deployment is rural Nepal. We do not claim clinical deployability without local validation. While heart-sound acoustics are physiologically universal in healthy children, mitral-regurgitation murmur prevalence (the dominant Nepal RHD lesion) runs higher in the Nepal cohort than in the Brazilian source, shifting the prior and the optimal decision threshold. For a prospective Nepal study, three things must follow: IRB approval from a Nepalese institution, parental consent and child assent in Nepali, and threshold re-calibration against a Nepali validation cohort. The dataset itself was collected under IRB approval with informed consent and is used here under the PhysioNet Credentialed Health Data Licence.
 
-\textit{Failure-mode harm and clinical positioning.} GPC's 30.6\% sensitivity means $\sim$70\% of Present-murmur recordings are predicted Absent at threshold 0.5, a false-negative rate no responsible screening workflow can accept as a primary gate. Our two-stage deployment (Figure~\ref{fig:deployment}) therefore uses Lasso-LR (sensitivity 61.4\%) as the inclusive gate and reserves GPC as the high-confidence-referral overlay. We position the system as a \textit{screening aid}, not a diagnostic device --- every flagged child still gets clinician auscultation and, where indicated, echocardiography. The fractal-jump finding above reinforces this: the pipeline is not a black-box clinical tool.
+\textit{Failure-mode harm and clinical positioning.} GPC's 30.6\% sensitivity means $\sim$70\% of Present-murmur recordings are predicted Absent at threshold 0.5, a false-negative rate no responsible screening workflow can accept as a primary gate. Our two-stage deployment (Figure~\ref{fig:deployment}) therefore uses Lasso-LR (sensitivity 61.4\%) as the inclusive gate and reserves GPC as the high-confidence-referral overlay. Our framing is \textit{screening aid}, not diagnostic device; every flagged child still receives clinician auscultation and, where indicated, echocardiography. The fractal-jump finding above reinforces this: the pipeline is not a black-box clinical tool.
 
 % ============================================================
 \section{Conclusion}
@@ -482,7 +484,7 @@ Cardiac auscultation gates paediatric structural-heart-disease screening worldwi
 % ============================================================
 \section*{Appendix: Supplementary Materials}
 
-All experiment artefacts are provided alongside this report: \texttt{heart\_murmur\_pipeline.ipynb} (full reproducible Jupyter notebook), \texttt{run\_models.py} (5$\times$5 ablation grid), \texttt{run\_smote.py} (imbalance sensitivity analysis), \texttt{uq\_unknown.py} (Unknown-class entropy validation), \texttt{error\_analysis.py} (Section~\ref{sec:erroranalysis}), per-fold result CSVs, EDA outputs in \texttt{eda\_outputs/}, and trained \texttt{.pkl} models with scaler in \texttt{models/}. Reproduction steps are documented in \texttt{README.md}.
+All experiment artefacts are provided alongside this report: \nolinkurl{heart_murmur_pipeline.ipynb} (full reproducible Jupyter notebook), \nolinkurl{run_models.py} (5$\times$5 ablation grid), \nolinkurl{run_smote.py} (imbalance sensitivity analysis), \nolinkurl{uq_unknown.py} (Unknown-class entropy validation), \nolinkurl{error_analysis.py} (Section~\ref{sec:erroranalysis}), per-fold result CSVs, EDA outputs in \nolinkurl{eda_outputs/}, and trained \nolinkurl{.pkl} models with scaler in \nolinkurl{models/}. Reproduction steps are documented in the project \nolinkurl{README}.
 
 \textbf{YouTube video:} \url{https://youtu.be/mG-sTXNEAYw}
 
